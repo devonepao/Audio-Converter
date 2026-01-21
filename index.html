@@ -237,6 +237,68 @@
             font-weight: bold;
         }
 
+        .quality-selector {
+            margin-bottom: 20px;
+        }
+
+        .size-estimate {
+            background: #f0f7ff;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .size-estimate.active {
+            display: block;
+        }
+
+        .size-estimate h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .size-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        .size-table th,
+        .size-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .size-table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .size-table tr:hover {
+            background: #f8f9ff;
+        }
+
+        .size-table .selected-row {
+            background: #e6f0ff;
+            font-weight: 600;
+        }
+
+        .size-reduction {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .size-increase {
+            color: #ef4444;
+            font-weight: 600;
+        }
+
         /* Mobile responsiveness */
         @media (max-width: 768px) {
             body {
@@ -309,6 +371,18 @@
                 </select>
             </div>
 
+            <div class="quality-selector">
+                <label for="quality">Choose Quality (affects file size):</label>
+                <select id="quality">
+                    <option value="64000">Low - 64 kbps (smallest file)</option>
+                    <option value="128000" selected>Medium - 128 kbps (balanced)</option>
+                    <option value="192000">High - 192 kbps (good quality)</option>
+                    <option value="320000">Maximum - 320 kbps (best quality)</option>
+                </select>
+            </div>
+
+            <div class="size-estimate" id="sizeEstimate"></div>
+
             <button id="convertBtn" disabled>Select a file to convert</button>
 
             <div class="progress-container" id="progressContainer">
@@ -323,6 +397,9 @@
                 <ul>
                     <li>100% browser-based - Your files never leave your device</li>
                     <li>Fast conversion using Web Audio API</li>
+                    <li>Quality control - Choose bitrate from 64kbps to 320kbps</li>
+                    <li>File size estimation - See output sizes before converting</li>
+                    <li>Optimize file size - Lower quality for smaller files</li>
                     <li>Mobile and desktop optimized</li>
                     <li>Support for multiple audio formats</li>
                     <li>Web-optimized format option for best quality/size ratio</li>
@@ -347,6 +424,8 @@
         const fileSize = document.getElementById('fileSize');
         const convertBtn = document.getElementById('convertBtn');
         const outputFormat = document.getElementById('outputFormat');
+        const quality = document.getElementById('quality');
+        const sizeEstimate = document.getElementById('sizeEstimate');
         const progressContainer = document.getElementById('progressContainer');
         const progressFill = document.getElementById('progressFill');
         const statusMessage = document.getElementById('statusMessage');
@@ -389,7 +468,133 @@
             fileInfo.classList.add('active');
             convertBtn.disabled = false;
             convertBtn.textContent = 'Convert Audio';
+            
+            // Load and decode audio to get duration for size estimates
+            loadAudioForEstimate(file);
         }
+
+        async function loadAudioForEstimate(file) {
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const arrayBuffer = await file.arrayBuffer();
+                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                updateSizeEstimates();
+            } catch (error) {
+                console.error('Error loading audio for estimate:', error);
+            }
+        }
+
+        function updateSizeEstimates() {
+            if (!audioBuffer) return;
+            
+            const duration = audioBuffer.duration;
+            const originalSize = audioFile.size;
+            const selectedFormat = outputFormat.value;
+            const selectedQuality = parseInt(quality.value);
+            
+            // Calculate estimated sizes for different formats and qualities
+            const estimates = [];
+            const formats = [
+                { value: 'wav', name: 'WAV (Uncompressed)', quality: null },
+                { value: 'webm-opus', name: 'WebM/Opus', quality: 64000 },
+                { value: 'webm-opus', name: 'WebM/Opus', quality: 128000 },
+                { value: 'webm-opus', name: 'WebM/Opus', quality: 192000 },
+                { value: 'webm-opus', name: 'WebM/Opus', quality: 320000 },
+                { value: 'ogg', name: 'OGG Vorbis', quality: 64000 },
+                { value: 'ogg', name: 'OGG Vorbis', quality: 128000 },
+                { value: 'ogg', name: 'OGG Vorbis', quality: 192000 },
+                { value: 'ogg', name: 'OGG Vorbis', quality: 320000 },
+            ];
+            
+            formats.forEach(fmt => {
+                const estimatedSize = estimateOutputSize(duration, fmt.value, fmt.quality);
+                const diff = ((estimatedSize - originalSize) / originalSize * 100).toFixed(1);
+                const isSelected = fmt.value === selectedFormat && 
+                                 (fmt.quality === selectedQuality || (fmt.quality === null && selectedFormat === 'wav'));
+                
+                estimates.push({
+                    format: fmt.name,
+                    quality: fmt.quality ? `${(fmt.quality / 1000).toFixed(0)} kbps` : 'N/A',
+                    size: formatBytes(estimatedSize),
+                    diff: diff,
+                    selected: isSelected
+                });
+            });
+            
+            // Generate HTML for size estimate table
+            let html = `
+                <h4>📊 Estimated Output Sizes</h4>
+                <p style="font-size: 0.85rem; color: #666; margin-bottom: 10px;">
+                    Original file: ${formatBytes(originalSize)} | Duration: ${duration.toFixed(1)}s
+                </p>
+                <table class="size-table">
+                    <thead>
+                        <tr>
+                            <th>Format</th>
+                            <th>Quality</th>
+                            <th>Est. Size</th>
+                            <th>Change</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            estimates.forEach(est => {
+                const rowClass = est.selected ? 'selected-row' : '';
+                const diffClass = parseFloat(est.diff) < 0 ? 'size-reduction' : 'size-increase';
+                const diffSymbol = parseFloat(est.diff) > 0 ? '+' : '';
+                html += `
+                    <tr class="${rowClass}">
+                        <td>${est.format}${est.selected ? ' ⭐' : ''}</td>
+                        <td>${est.quality}</td>
+                        <td>${est.size}</td>
+                        <td class="${diffClass}">${diffSymbol}${est.diff}%</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+                <p style="font-size: 0.8rem; color: #666; margin-top: 10px;">
+                    ⭐ = Currently selected format and quality
+                </p>
+            `;
+            
+            sizeEstimate.innerHTML = html;
+            sizeEstimate.classList.add('active');
+        }
+
+        function estimateOutputSize(durationSeconds, format, bitrate) {
+            if (format === 'wav') {
+                // WAV: sample_rate * channels * bits_per_sample * duration / 8 + header
+                const sampleRate = audioBuffer.sampleRate;
+                const channels = audioBuffer.numberOfChannels;
+                const bitsPerSample = 16;
+                return (sampleRate * channels * bitsPerSample * durationSeconds / 8) + 44;
+            } else {
+                // Compressed formats: bitrate * duration / 8 + overhead
+                // Add 10% overhead for container format
+                return (bitrate * durationSeconds / 8) * 1.1;
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        }
+
+        // Update estimates when format or quality changes
+        outputFormat.addEventListener('change', () => {
+            if (audioBuffer) updateSizeEstimates();
+        });
+
+        quality.addEventListener('change', () => {
+            if (audioBuffer) updateSizeEstimates();
+        });
 
         convertBtn.addEventListener('click', async () => {
             if (!audioFile) return;
@@ -399,21 +604,23 @@
             updateProgress(10, 'Reading audio file...');
 
             try {
-                // Initialize audio context
+                // Initialize audio context if not already done
                 if (!audioContext) {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 }
 
-                // Read file as ArrayBuffer
-                const arrayBuffer = await audioFile.arrayBuffer();
-                updateProgress(30, 'Decoding audio...');
-
-                // Decode audio data
-                audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                // Decode audio data if not already done
+                if (!audioBuffer) {
+                    const arrayBuffer = await audioFile.arrayBuffer();
+                    updateProgress(30, 'Decoding audio...');
+                    audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                }
+                
                 updateProgress(50, 'Converting to target format...');
 
                 // Convert based on selected format
                 const format = outputFormat.value;
+                const selectedQuality = parseInt(quality.value);
                 let blob, extension;
 
                 if (format === 'mp3') {
@@ -425,12 +632,12 @@
                     blob = await convertToWav(audioBuffer);
                     extension = 'wav';
                 } else if (format === 'ogg') {
-                    // OGG encoding requires MediaRecorder with ogg support
-                    blob = await convertUsingMediaRecorder(audioBuffer, 'audio/ogg');
+                    // OGG encoding with quality control
+                    blob = await convertUsingMediaRecorder(audioBuffer, 'audio/ogg', selectedQuality);
                     extension = 'ogg';
                 } else if (format === 'webm-opus') {
-                    // WebM with Opus codec - best for web
-                    blob = await convertUsingMediaRecorder(audioBuffer, 'audio/webm;codecs=opus');
+                    // WebM with Opus codec - best for web, with quality control
+                    blob = await convertUsingMediaRecorder(audioBuffer, 'audio/webm;codecs=opus', selectedQuality);
                     extension = 'webm';
                 }
 
@@ -441,13 +648,15 @@
                 const a = document.createElement('a');
                 a.href = url;
                 const originalName = audioFile.name.replace(/\.[^/.]+$/, '');
-                a.download = `${originalName}_converted.${extension}`;
+                const qualityLabel = format === 'wav' ? '' : `_${selectedQuality / 1000}kbps`;
+                a.download = `${originalName}_converted${qualityLabel}.${extension}`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
 
-                updateProgress(100, 'Conversion complete! Download started.');
+                const actualSize = formatBytes(blob.size);
+                updateProgress(100, `Conversion complete! File size: ${actualSize}`);
                 
                 setTimeout(() => {
                     convertBtn.disabled = false;
@@ -518,7 +727,7 @@
             return new Blob([buffer], { type: 'audio/wav' });
         }
 
-        async function convertUsingMediaRecorder(audioBuffer, mimeType) {
+        async function convertUsingMediaRecorder(audioBuffer, mimeType, bitrate) {
             return new Promise((resolve, reject) => {
                 // Check if the mimeType is supported
                 if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -533,7 +742,13 @@
                 recordingSource.buffer = audioBuffer;
                 recordingSource.connect(mediaStreamDestination);
 
-                const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream, { mimeType });
+                // Configure MediaRecorder with bitrate
+                const options = { 
+                    mimeType: mimeType,
+                    audioBitsPerSecond: bitrate
+                };
+                
+                const mediaRecorder = new MediaRecorder(mediaStreamDestination.stream, options);
                 const chunks = [];
 
                 mediaRecorder.ondataavailable = (e) => {
