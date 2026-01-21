@@ -360,8 +360,10 @@
             uploadArea.classList.add('dragover');
         });
 
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
+        uploadArea.addEventListener('dragleave', (e) => {
+            if (e.target === uploadArea) {
+                uploadArea.classList.remove('dragover');
+            }
         });
 
         uploadArea.addEventListener('drop', (e) => {
@@ -412,28 +414,24 @@
 
                 // Convert based on selected format
                 const format = outputFormat.value;
-                let blob, extension, mimeType;
+                let blob, extension;
 
                 if (format === 'mp3') {
                     // For MP3, we'll use WAV as intermediate and let browser handle
                     blob = await convertToWav(audioBuffer);
                     extension = 'wav'; // Note: True MP3 encoding requires external library
-                    mimeType = 'audio/wav';
                     updateProgress(80, 'Note: MP3 encoding requires additional libraries. Providing WAV format.');
                 } else if (format === 'wav') {
                     blob = await convertToWav(audioBuffer);
                     extension = 'wav';
-                    mimeType = 'audio/wav';
                 } else if (format === 'ogg') {
                     // OGG encoding requires MediaRecorder with ogg support
                     blob = await convertUsingMediaRecorder(audioBuffer, 'audio/ogg');
                     extension = 'ogg';
-                    mimeType = 'audio/ogg';
                 } else if (format === 'webm-opus') {
                     // WebM with Opus codec - best for web
                     blob = await convertUsingMediaRecorder(audioBuffer, 'audio/webm;codecs=opus');
                     extension = 'webm';
-                    mimeType = 'audio/webm';
                 }
 
                 updateProgress(90, 'Preparing download...');
@@ -528,20 +526,6 @@
                     return;
                 }
 
-                // Create an offline audio context to play the buffer
-                const offlineContext = new OfflineAudioContext(
-                    audioBuffer.numberOfChannels,
-                    audioBuffer.length,
-                    audioBuffer.sampleRate
-                );
-
-                const source = offlineContext.createBufferSource();
-                source.buffer = audioBuffer;
-                
-                // Create a destination that we can record from
-                const dest = offlineContext.destination;
-                source.connect(dest);
-
                 // Create a MediaStreamDestination for recording
                 const recordingContext = new (window.AudioContext || window.webkitAudioContext)();
                 const mediaStreamDestination = recordingContext.createMediaStreamDestination();
@@ -566,17 +550,18 @@
 
                 mediaRecorder.onerror = (e) => {
                     recordingContext.close();
-                    reject(new Error('Recording failed'));
+                    reject(new Error(`Recording failed: ${e.error?.message || 'Unknown error'}`));
                 };
 
                 mediaRecorder.start();
                 recordingSource.start(0);
 
-                // Stop recording after the audio duration
+                // Stop recording after the audio duration with buffer for longer files
+                const stopDelay = Math.max((audioBuffer.duration * 1000) + 500, 1000);
                 setTimeout(() => {
                     mediaRecorder.stop();
                     recordingSource.stop();
-                }, (audioBuffer.duration * 1000) + 100);
+                }, stopDelay);
             });
         }
     </script>
