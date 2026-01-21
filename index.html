@@ -496,16 +496,11 @@
             
             // Calculate estimated sizes for different formats and qualities
             const estimates = [];
+            const QUALITY_LEVELS = [64000, 128000, 192000, 320000];
             const formats = [
                 { value: 'wav', name: 'WAV (Uncompressed)', quality: null },
-                { value: 'webm-opus', name: 'WebM/Opus', quality: 64000 },
-                { value: 'webm-opus', name: 'WebM/Opus', quality: 128000 },
-                { value: 'webm-opus', name: 'WebM/Opus', quality: 192000 },
-                { value: 'webm-opus', name: 'WebM/Opus', quality: 320000 },
-                { value: 'ogg', name: 'OGG Vorbis', quality: 64000 },
-                { value: 'ogg', name: 'OGG Vorbis', quality: 128000 },
-                { value: 'ogg', name: 'OGG Vorbis', quality: 192000 },
-                { value: 'ogg', name: 'OGG Vorbis', quality: 320000 },
+                ...QUALITY_LEVELS.map(q => ({ value: 'webm-opus', name: 'WebM/Opus', quality: q })),
+                ...QUALITY_LEVELS.map(q => ({ value: 'ogg', name: 'OGG Vorbis', quality: q }))
             ];
             
             formats.forEach(fmt => {
