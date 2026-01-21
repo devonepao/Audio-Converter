@@ -487,7 +487,7 @@
         }
 
         function updateSizeEstimates() {
-            if (!audioBuffer) return;
+            if (!audioBuffer || !audioFile) return;
             
             const duration = audioBuffer.duration;
             const originalSize = audioFile.size;
@@ -568,16 +568,18 @@
         }
 
         function estimateOutputSize(durationSeconds, format, bitrate) {
+            const BITS_PER_SAMPLE = 16;
+            const WAV_HEADER_SIZE = 44;
+            const CONTAINER_OVERHEAD = 1.1; // 10% overhead for container format
+            
             if (format === 'wav') {
                 // WAV: sample_rate * channels * bits_per_sample * duration / 8 + header
                 const sampleRate = audioBuffer.sampleRate;
                 const channels = audioBuffer.numberOfChannels;
-                const bitsPerSample = 16;
-                return (sampleRate * channels * bitsPerSample * durationSeconds / 8) + 44;
+                return (sampleRate * channels * BITS_PER_SAMPLE * durationSeconds / 8) + WAV_HEADER_SIZE;
             } else {
                 // Compressed formats: bitrate * duration / 8 + overhead
-                // Add 10% overhead for container format
-                return (bitrate * durationSeconds / 8) * 1.1;
+                return (bitrate * durationSeconds / 8) * CONTAINER_OVERHEAD;
             }
         }
 
